@@ -25,17 +25,22 @@ Logs a given message at a given level
 - `LogTest(fmt, ...)`
 
 Sets the levels of logs to be outputed
-- `LogSetLv(lv)`
+- `LogSetLevel(lv)`
 
 ## Other methods
+Sets the file that the logs should be written to, if filename is null, then output to stdout
+- `LogSetFile(filename)`
+
 Redirect the standard output to a file
 - `LogRedirectStdOut(filename)`
 
-Redirect the standard output to a file & writes a message
-- `LogNewSession(filename)`
-
 Redirect the output back to standard output
 - `LogRedirectStdOut(NULL)`
+
+Writes a message to a given file
+If file is NULL, will output to stdout
+If redirect_stdout is true, will redirect the standard output to the file
+- `LogNewSession(filename, redirect_stdout)`
 
 Gets the string reperastaion of a log level:
 - `LogLvString(lv)`
@@ -83,9 +88,9 @@ Log a fatial message if a condtion is met
 ### LogExitAssert, LogExitAssertNull
 Lazy mans way of doing: `LogAssert(...); exit(X);`
 
-### LogErrorTrace
-Logs a line of arrows up to a previous log message
+### LogErrorBacktrace
+Logs a line of arrows up to a previous error log message
 
-### LogErrorTraceReturn
-Lazy mans way of doing: `LogErrorTrace(); return X;`
+### LogErrorBacktraceAndReturn
+Lazy mans way of doing: `LogErrorBacktrace(); return X;`
 
