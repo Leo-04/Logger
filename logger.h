@@ -215,7 +215,7 @@ static inline void Logger(enum LogLv level, const char* file, int line, const ch
         // This ensures that the above is written
         //  and pointer bugs can be found even if
         //  we are trying to log pointer access
-        fflush(stdout);  // AKA don't remove
+        fflush(log_file? log_file: stdout);  // AKA don't remove
         
         // Log arguments
         va_list args;
