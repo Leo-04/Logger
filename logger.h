@@ -229,6 +229,9 @@ static inline void Logger(enum LogLv level, const char* file, int line, const ch
         #endif
         
         fprintf(log_file? log_file: stdout, "\n");
+        
+        // Flush once done
+        fflush(log_file? log_file: stdout);
     }
 }
 
