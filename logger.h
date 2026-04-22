@@ -46,11 +46,11 @@ Log a fatial message if a condtion is met
 # LogExitAssert, LogExitAssertNull
 Lazy mans way of doing: `LogAssert(...); exit(X);`
 
-# LogErrorTrace
+# LogErrorBacktrace
 Logs a line of arrows up to a previous log message
 
-# LogErrorTraceReturn
-Lazy mans way of doing: `LogErrorTrace(); return X;`
+# LogErrorBacktraceAndReturn
+Lazy mans way of doing: `LogErrorBacktrace(); return X;`
 */
 #define Log(lv, fmt, ...) Logger(lv, __FILE__, __LINE__, __func__, fmt, ## __VA_ARGS__)
 #define LogNormal(...) Log(LogLv_NORMAL, __VA_ARGS__)
@@ -62,21 +62,18 @@ Lazy mans way of doing: `LogErrorTrace(); return X;`
 #define LogTrace(...) Log(LogLv_TRACE, __VA_ARGS__)
 #define LogTest(...) Log(LogLv_TEST, __VA_ARGS__)
 
-#define LogFatialExit(code) LogFatial("Exiting with code: %i", code); exit(code);
+#define LogFatialExit(code) do {LogFatial("Exiting with code: %i", code); exit(code);}while(0)
 
 // Assert functions
 #define STRINGIFY(x) #x
-#define LogAssert(expr) if (expr){LogFatial("Assertion failed %s", STRINGIFY(expr));};
+#define LogAssert(expr) do {if (expr){LogFatial("Assertion failed %s", STRINGIFY(expr));}}while(0)
 #define LogAssertNull(expr) LogAssert((expr) == NULL)
-#define LogExitAssert(expr) if (expr){LogFatialExit(-1);}
+#define LogExitAssert(expr) do {if (expr){LogFatialExit(-1);}}while(0)
 #define LogExitAssertNull(expr) LogExitAssert((expr) == NULL)
 
 // Other
-#define LogErrorTrace() LogError("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^");
-#define LogErrorTraceReturn(n) LogErrorTrace(); return n;
-
-// Control what is logged
-#define LogSetLv(lv) Log(lv, NULL);
+#define LogErrorBacktrace() LogError("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^");
+#define LogErrorBacktraceAndReturn(n) do{LogErrorBacktrace(); return n;}while(0)
 
 // Constants
 enum LogLv{
@@ -110,12 +107,55 @@ enum LogLv{
 
 #ifdef _NO_LOGGING
 
-static inline int Pass(void){return 0;}
-#define LogNewSession(arg) Pass()
-#define LogRedirectStdOut(arg) Pass()
+static inline int PassI(void){return 0;}
+static inline void Pass(void){;}
+#define LogNewSession(arg) PassI()
+#define LogRedirectStdOut(arg) PassI()
+#define LogSetlevel(lv) Pass()
+#define LogSetFile(file) PassI()
 #define Logger(...) Pass()
 
 #else
+
+static enum LogLv log_mask = (LOG_MASK);
+static FILE* log_file = NULL;
+
+/*
+* Sets the logging level
+*
+* Parameters
+*   level: LogLv
+*       The level of the log
+*/
+static inline void LogSetlevel(enum LogLv lv){
+    log_mask = lv;
+}
+
+
+/*
+* Redirects stdout to a file
+*
+* Parameters:
+*   filename: const char* 
+*       The name of the file to redirect to
+*       if filename == NULL, then it will redirect back to the console
+*
+* Returns:
+*   0 on success
+*/
+static inline int LogSetFile(const char* file){
+    if (file == NULL){
+        log_file = NULL;
+        return 0;
+    }
+    
+    if (log_file != stdout && log_file != NULL){
+        fclose(log_file);
+    }
+    log_file = fopen(file, "a");
+    return log_file == NULL;
+}
+
 
 /*
 * Logs messages to stdout
@@ -143,12 +183,11 @@ static inline int Pass(void){return 0;}
 */
 static inline void Logger(enum LogLv level, const char* file, int line, const char* func, const char* fmt, ...) {
     // Check if mask is on
-    static enum LogLv log_mask = LOG_MASK;
-    if (fmt == NULL) log_mask = level;
-    else if (log_mask & level){
+    
+    if (log_mask & level){
         // Check for color
         #ifdef _LOG_COLOR_ENABLED
-            printf("\033[%im",
+            fprintf(log_file? log_file: stdout, "\033[%im",
                 (level == LogLv_NORMAL)? 97:
                 (level == LogLv_INFO)? 92:
                 (level == LogLv_WARN)? 33:
@@ -168,7 +207,7 @@ static inline void Logger(enum LogLv level, const char* file, int line, const ch
         timeinfo = localtime ( &rawtime );
 
         // Log information
-        printf(
+        fprintf(log_file? log_file: stdout,
             "%.24s|%s[%s:%i %s]: ",
             asctime(timeinfo), LogLvString(level), file, line, func
         );
@@ -181,15 +220,15 @@ static inline void Logger(enum LogLv level, const char* file, int line, const ch
         // Log arguments
         va_list args;
         va_start(args, fmt);
-        vprintf(fmt, args);
+        vfprintf(log_file? log_file: stdout, fmt, args);
         va_end(args);
 
         // Check for color
         #ifdef _LOG_COLOR_ENABLED
-            printf("\033[1;0m");
+            fprintf(log_file? log_file: stdout, "\033[1;0m");
         #endif
         
-        printf("\n");
+        fprintf(log_file? log_file: stdout, "\n");
     }
 }
 
@@ -266,14 +305,13 @@ static inline int LogRedirectStdOut(const char* filename){
 * Returns:
 *   0 on success
 */
-static inline int LogNewSession(const char* log_file){
-    //Check if log_file is valid
-    int ret;
-    if (log_file != NULL){
-        ret = LogRedirectStdOut(log_file);
-        if (ret != 0){
-            LogErrorTraceReturn(ret);
-        }
+static inline int LogNewSession(const char* log_filename, bool redirect_sdtout){
+    //Check if log_filename is valid
+    if (log_filename != NULL){
+        if (
+            (redirect_sdtout && LogRedirectStdOut(log_filename))
+            || LogSetFile(log_filename)
+        ) LogErrorBacktraceAndReturn(1);
     }
 
     // Get the current time
@@ -283,10 +321,10 @@ static inline int LogNewSession(const char* log_file){
     timeinfo = localtime ( &rawtime );
 
     // Output
-    printf("\n=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=[%.24s]=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=\n", asctime(timeinfo));
+    fprintf(log_file? log_file: stdout, "\n=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=[%.24s]=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=\n", asctime(timeinfo));
     fflush(stdout);
 
-    return ret;
+    return 0;
 }
 
 #endif
